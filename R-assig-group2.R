@@ -45,7 +45,7 @@ all_fe <- allFitnessEffects(genotFitness = fit_cells,
 ## Plot: first scenario
 sc1 <- evalAllGenotypes(all_fe, spPopSizes = c(10,1,0,10))[c(1, 3, 4),]
 
-plot(sc1)
+plotFitnessLandscape(sc1)
 
 ## Simulation
 
