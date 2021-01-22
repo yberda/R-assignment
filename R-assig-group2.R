@@ -1,3 +1,5 @@
+## GROUP 2: Alicia Gallego, Barbara Gonzalez and Yosra Berrouayel
+
 if (!require("BiocManager"))
         install.packages("BiocManager")
 
