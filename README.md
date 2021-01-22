@@ -1,5 +1,5 @@
 # R-assignment
 
-* R-assig-code.R --> R code for the simulations
-* vignette.Rmd --> modified vignette that includes the simulation examples
+* R-assig-group2.R --> R code for the simulations
+* vig-group2.Rmd --> modified vignette
 * R-presentation.pdf --> pdf presentation
