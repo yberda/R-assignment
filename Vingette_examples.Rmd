@@ -1,0 +1,478 @@
+---
+title: "Examples OncoSimulR"
+author: "Group 2: Yosra Berrouayel Dahour, Alicia Gallego Jimenez, Barbara Pilar Gonzalez Serrano"
+date: "21/1/2021"
+output: html_document
+bibliography: OncoSimulR.bib
+biblio-style: "apalike"
+link-citations: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Examples
+
+Evolution of resistance is a common cause of cancer treatment failure and tumor progression. The conventional treatment strategy, which administers cytotoxic drugs at maximum tolerated dose (MTD) until progression, can be evolutionarily unwise because it strongly selects for resistant phenotypes and eliminates potential competitors. This can lead to rapid proliferation of resistant populations. Adaptive therapy is an innovative treatment regimen that uses the same drug as the standard of care, but applies it differently. It has two different features:  
+
+* It is ‘adaptive’: Instead of using a fixed schedule, treatment decisions are based on how individual tumors respond to treatment.  
+* It is designed to leverage competition between drug-sensitive and drug-resistant cells to improve tumor control.  
+
+        
+Rather than attempting to drive tumor cell populations to undetectable levels, it deliberately maintains a notable tumor burden to competitively suppress resistance. In adaptive therapy, the treatment is applied in small doses to decrease the tumor population, and then, the treatment is withdrawn. In the absence of treatment, sensitive cells will proliferate at the expense of the resistant ones, so while the tumor will increase in size while it will continue to be sensitive to the treatment.  
+
+
+This vignette shows examples where we used OncoSimulR to simulate the growth of a tumor. Below you will find the output expected with no treatment, treatment based on maximum tolerated dose and different approaches of adaptive therapy. Considering that adaptive therapy is a growing field, these examples aim to simulate the most similar approach with the capacities of OncoSimulR.  
+
+
+Along the code we will use the same starting coefficients for healthy, sensitive and resistant cells. So, the code starts as:
+
+```{r}
+library(OncoSimulR)
+
+##  COEFFICIENTS
+
+# Healthy     Sensitive   Resistant
+a <- 1;       b <- 0.5;   c <- 0.5    # Healthy
+d <- 1;       e <- 1.2;   f <- 0.7    # Sensitive
+g <- 0.9;     h <- -0.5;  i <- 0.8    # Resistant
+
+
+wt_fitness <- paste0(a, "*f_+", b, "*f_S+", c, "*f_S_R")
+sens_fitness <- paste0(d,"*f_+",e,"*f_S+",f,"*f_S_R")
+res_fitness <- paste0(g,"*f_+",h,"*f_S+",i,"*f_S_R")
+```
+
+## 1. No chemotherapy
+
+This code shows the expected output of the tumor growth if no chemotherapy is administered.
+
+```{r, message=FALSE}
+## Fitness definition
+fit_cells <- data.frame(Genotype = c("WT","S","R","S,R"),
+                       Fitness = c(wt_fitness,       #WT
+                                   sens_fitness,     #S
+                                   "0",              #R
+                                   res_fitness),     #S,R
+                       stringsAsFactors = FALSE)
+
+
+all_fe <- allFitnessEffects(genotFitness = fit_cells,
+                            frequencyDependentFitness = TRUE,
+                            frequencyType = "rel")
+
+
+## Plot: first scenario
+sc1 <- evalAllGenotypes(all_fe, spPopSizes = c(10,1,0,10))[c(1, 3, 4),]
+
+plot(sc1)
+
+## Simulation
+
+set.seed(2)
+
+simul <- oncoSimulIndiv(all_fe,
+                            model = "McFL",
+                            onlyCancer = FALSE,
+                            finalTime = 50,
+                            mu = 0.01,
+                            initSize = 5000,
+                            keepPhylog = FALSE,
+                            seed = NULL)
+```
+
+The results are represented in these plots:
+
+```{r, echo=FALSE}
+plot(simul, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 50000),
+     main = "No chemotherapy")
+plot(simul, show = "genotypes", col = c("grey", "Red3", "Sky blue"),
+     main = "No chemotherapy")
+```
+
+These plots show that the tumor has a population of mainly sensitive clones when no treatment is applied.
+
+
+## 2. Conventional therapy: maximum tolerated dose therapy
+
+The traditional treatment was administering the highest dose that can safely be given with the fewest serious side effects (maximum tolerated dose). The dose is fixed and continuous.
+
+```{r}
+## Fitness definition
+
+drug_eff <- 0.01  # effect of drug on sensitive cells
+
+fit_cells2 <- data.frame(Genotype = c("WT", "S", "R", "S, R"),
+                         Fitness = c(wt_fitness,                       #WT
+                                      paste0("if (T>50) ", drug_eff, 
+                                      "*(",sens_fitness, ")",";
+                                      else ", sens_fitness, ";"),      #S
+                                    "0",                               #R
+                                    res_fitness),                      #S,R
+                        stringsAsFactors = FALSE)
+
+all_fe2 <- allFitnessEffects(genotFitness = fit_cells2,
+                              frequencyDependentFitness = TRUE,
+                              frequencyType = "rel")
+
+## Simulation
+
+set.seed(2)
+
+simul2 <- oncoSimulIndiv(all_fe2,
+                         model = "McFL",
+                         onlyCancer = FALSE,
+                         finalTime = 170,
+                         mu = 0.01,
+                         initSize = 5000,
+                         keepPhylog = FALSE,
+                         seed = NULL)
+```
+
+As we can see in the plots below, this treatment leads to the growth of resistant tumor cells:
+
+```{r, echo=FALSE}
+## Plots: number of cells vs time
+# ylim has been adapted to number of cells
+plot(simul2, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 300000),
+     thinData = TRUE, main = "Fixed dose")
+plot(simul2, show = "genotypes", ylim = c(20, 10000), 
+     col = c("grey", "Red3", "Sky blue"), main = "Fixed dose")
+```
+
+## 3. Adaptive therapy
+
+### 3.1 Intervals of 10 days with a fixed dose and 2 days without treatment
+
+The first approach of adaptive therapy is based on manually establishing a dose administration schedule. Following the literature, this dose is a little less than the maximum tolerated.
+
+```{r}
+## Fitness definition
+
+drug_eff2 <- 0.015 
+
+fit_cells3 <-data.frame(Genotype = c("WT", "S", "R", "S, R"),
+                        Fitness = c(wt_fitness,                         #WT
+                                    paste0("if (T>48 & T<58)", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>60 & T<70) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>72 & T<82) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>84 & T<94) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>96 & T<106) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>108 & T<118) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>120 & T<130) ",
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>132 & T<142) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>144 & T<154) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>156 & T<166) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>168 & T<178) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>180 & T<190) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>192 & T<202) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else if (T>204 & T<214) ", 
+                                           drug_eff2, "*(", sens_fitness,")",
+                                           "; else ", sens_fitness, ";"),   #S
+                                    "0",                                    #R
+                                    res_fitness),                           #S,R
+                        stringsAsFactors = FALSE)
+
+
+all_fe3 <- allFitnessEffects(genotFitness = fit_cells3,
+                             frequencyDependentFitness = TRUE,
+                             frequencyType = "rel")
+
+##Simulation
+
+set.seed(2)
+
+simul3  <- oncoSimulIndiv(all_fe3,
+                          model = "McFL",
+                          onlyCancer = FALSE,
+                          finalTime = 220,
+                          mu = 0.01,
+                          initSize = 5000,
+                          keepPhylog = FALSE,
+                          seed = NULL)
+```
+
+This simulation gives us an idea of the results we would obtain with the prefixed dose schedule. In this case we study 10 days of chemotherapy and 2 days without treatment.
+
+```{r, echo=FALSE}
+## Plots: number of cells vs time
+# ylim has been adapted to number of cells
+plot(simul3, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 200000),
+     main = "Fixed dose (10 d) every 2 days")
+plot(simul3, show = "genotypes", ylim = c(20, 9000),
+     col = c("grey", "Red3", "Sky blue"),
+     main = "Fixed dose (10 d) every 2 days")
+```
+However, this treatment approach is not appropriate, since it is included manually. It is a better idea to use a function that represents the treatment effect as a function of certain variables such as cell number or time.
+
+### 3.2 Intermittent treatment depending on the total number of cells (turn on/off)
+
+Adaptive therapy maintains a measurable tumor burden by modulating treatment according to tumor response. There are several ways that this can be implemented. @hansen20 use an approach to enhance competitive suppression in cancer: they administer the treatment until a specific tumor marker is reduced to a specific percentage of initial baseline. Once this reduction has been observed, treatment is halted and withheld until the marker returns to the initial baseline. This completes a single cycle of adaptive therapy and cycles are repeated until treatment can no longer prevent the marker from exceeding the initial baseline (i.e., until its progression).  
+
+
+In OncoSimulR the size is represented by the total number of cancer cells. In order to simulate the above approach, we designed an assignment that controls the tumor size within a range of number of cells. The assignment uses a tag to apply the treatment when the number of total cells exceeds a specific number (maximum of 2500), and to stop it once the number of cells reaches a minimum of 500. Thus, the assignment sets a allowable range of tumor size, and the number of cells will range from a minimum to a maximum.  
+
+
+```{r}
+drug_eff2 <- 0.015
+
+fit_cells4 <-data.frame(Genotype = c("WT", "S", "R", "S, R"),
+                       Fitness = c(wt_fitness,                              #WT
+                                   # the next expression uses a tag to turn
+                                   # the drug effect on and off (it does not 
+                                   # work because variables are not saved after
+                                   # each iteration and drug is always assigned
+                                   # 'true')
+                                   paste0("var drug := true;
+                                           if (T>50 & N>500 & drug = true)",
+                                           drug_eff2, "* (", sens_fitness,");
+                                           else if (T>50 & N=500) {
+                                           drug := false;",
+                                           sens_fitness, ";
+                                           }
+                                           else if (T>50 & N=2500) {
+                                           drug := true;",
+                                           drug_eff2, "* (", sens_fitness,");
+                                           }
+                                           else ", sens_fitness, ";"),      #S
+                                   "0",                                     #R   
+                                   res_fitness),                           #S,R
+                       stringsAsFactors = FALSE)
+
+fit_cells4
+
+all_fe4 <- allFitnessEffects(genotFitness = fit_cells4,
+                             frequencyDependentFitness = TRUE,
+                             frequencyType = "rel")
+
+## Simulation
+
+set.seed(2)
+
+simul4  <- oncoSimulIndiv(all_fe4,
+                          model = "McFL",
+                          onlyCancer = FALSE,
+                          finalTime = 170,
+                          mu = 0.01,
+                          initSize = 5000,
+                          keepPhylog = FALSE,
+                          seed = NULL)
+```
+
+Unfortunately OncoSimulR is not adapted with this version of adaptive therapy. The problem of this approach is that the tag value is not saved after each iteration, and it is always set to true since it is set that way at the beginning of the assignment. The results do not show the expected oscillation in size:
+
+```{r, echo= FALSE}
+## Plots: number of cells vs time
+# ylim has been adapted to number of cells
+plot(simul4, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 200000),
+     main = "Attempt to turn treatment on/off")
+plot(simul4, show = "genotypes", ylim = c(20, 10000),
+     col = c("grey", "Red3", "Sky blue"),
+     main = "Attempt to turn treatment on/off")
+```
+
+### 3.3 Intervention depending on the total number of cells
+
+Since setting an allowable range did not work given the limitations of the OncoSimulR package, we simplified the model by setting only a maximum number of cells. The treatment is applied when the size exceeds the maximum, and withdrawn when it reaches that limit:
+
+```{r}
+drug_eff2 <- 0.015
+
+fit_cells5 <-data.frame(Genotype = c("WT", "S", "R", "S, R"),
+                        Fitness = c(wt_fitness,                              #WT
+                                    paste0("if (T>50 & N>500)", 
+                                           drug_eff2, "* (", sens_fitness,")",
+                                           "; else ", sens_fitness, ";"),    #S
+                                    "0",                                     #R
+                                    res_fitness),                            #S,R
+                        stringsAsFactors = FALSE)
+
+all_fe5 <- allFitnessEffects(genotFitness = fit_cells5,
+                         frequencyDependentFitness = TRUE,
+                         frequencyType = "rel")
+
+## Simulation
+
+set.seed(2)
+
+simul5  <- oncoSimulIndiv(all_fe5,
+                          model = "McFL",
+                          onlyCancer = FALSE,
+                          finalTime = 170,
+                          mu = 0.01,
+                          initSize = 5000,
+                          keepPhylog = FALSE,
+                          seed = NULL)
+```
+
+OncoSimulR measures the time continuously so it does not allow any growth after the set maximum is reached. In reality, the size would be checked in discrete times (every week for example) and only if the tumor has exceeded the size limit, would the dose be dispensed.
+
+```{r, echo= FALSE}
+## Plots: number of cells vs time
+# ylim has been adapted to number of cells
+plot(simul5, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 200000),
+     main = "Intervention depending on N")
+plot(simul5, show = "genotypes", ylim = c(20, 10000),
+     col = c("grey", "Red3", "Sky blue"),
+     main = "Intervention depending on N")
+```
+
+### 3.4. Changing the dose as a function of time
+
+After the cell number-dependent adaptive therapy simulations, we carried out time-dependent approximations in order to obtain simulations closer to reality. In this first case, we define a sine expression as a function of time to simulate an approach in which the dose is changed throughout the treatment. The sine function represents the effect of the drug on cell fitness, and it oscillates between approximately 0.01 and 0.8.
+
+
+```{r}
+fit_cells6 <-data.frame(Genotype = c("WT", "S", "R", "S, R"),
+                        Fitness = c(wt_fitness,                         #WT
+                                    paste0("if (T>50) ((0.41 + 2*sin(T+21)/5))
+                                                   *(", sens_fitness, ");
+                                       else ", sens_fitness, ";"),      #S
+                                    "0",                                 #R
+                                    res_fitness),                        #S,R
+                        stringsAsFactors = FALSE)
+
+
+all_fe6 <- allFitnessEffects(genotFitness = fit_cells6,
+                             frequencyDependentFitness = TRUE,
+                             frequencyType = "rel")
+
+##Simulation
+
+set.seed(2)
+
+simul6  <- oncoSimulIndiv(all_fe6,
+                          model = "McFL",
+                          onlyCancer = FALSE,
+                          finalTime = 170,
+                          mu = 0.01,
+                          initSize = 5000,
+                          keepPhylog = FALSE,
+                          seed = NULL)
+```
+
+```{r, echo= FALSE}
+## Plots: number of cells vs time
+# ylim has been adapted to number of cells
+plot(simul6, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 200000),
+     main = "Intervention depending on T")
+plot(simul6, show = "genotypes", ylim = c(20, 9000),
+     col = c("grey", "Red3", "Sky blue"),
+     main = "Intervention depending on T")
+```
+
+
+### 3.4. Intermittent treatment: 3 days of treatment and 3 days without treatment
+
+A different approach would be to apply a fixed dose of the drug on different days. In this case, the drug is applied for approximately 3 days, and stopped for 3 days as well, so that the tumor can increase in size before reapplying the drug. Thus, the treatment is applied half the time.
+
+```{r}
+drug_eff2 <- 0.015
+
+fit_cells7 <-data.frame(Genotype = c("WT", "S", "R", "S, R"),
+                        Fitness = c(wt_fitness,                   #WT
+                                    paste0("if (T>50 & sin(T)>0)", 
+                                    drug_eff2, "*(", sens_fitness, ");
+                                    else ", sens_fitness, ";"),    #S
+                                    "0",                           #R
+                                    res_fitness),                  #S,R
+                        stringsAsFactors = FALSE)
+
+
+all_fe7 <- allFitnessEffects(genotFitness = fit_cells7,
+                             frequencyDependentFitness = TRUE,
+                             frequencyType = "rel")
+
+##Simulation
+
+set.seed(2)
+
+simul7  <- oncoSimulIndiv(all_fe7,
+                          model = "McFL",
+                          onlyCancer = FALSE,
+                          finalTime = 170,
+                          mu = 0.01,
+                          initSize = 5000,
+                          keepPhylog = FALSE,
+                          seed = NULL)
+```
+
+```{r, echo=FALSE}
+## Plots: number of cells vs time
+# ylim has been adapted to number of cells
+plot(simul7, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 200000),
+     main = "~3d treatment - ~3d no treatment")
+plot(simul7, show = "genotypes", ylim = c(20, 9000),
+     col = c("grey", "Red3", "Sky blue"),
+     main = "~3d treatment - ~3d no treatment")
+```
+
+### 3.5. Intermittent treatment: 4.5 days with treatment and 2 days without treatment
+
+Similar to the previous approach, but with a more intense treatment by applying the drug for more days than it is withdrawn.
+
+```{r}
+drug_eff2 <- 0.015
+
+fit_cells8 <-data.frame(Genotype = c("WT", "S", "R", "S, R"),
+                        Fitness = c(wt_fitness,                   #WT
+                                    paste0("if (T>50 & (sin(T) + 0.6)>0)", 
+                                           drug_eff2, "*(", sens_fitness, ");
+                                    else ", sens_fitness, ";"),    #S
+                                    "0",                           #R
+                                    res_fitness),                  #S,R
+                        stringsAsFactors = FALSE)
+
+
+all_fe8 <- allFitnessEffects(genotFitness = fit_cells8,
+                             frequencyDependentFitness = TRUE,
+                             frequencyType = "rel")
+
+##Simulation
+
+set.seed(2)
+
+simul8  <- oncoSimulIndiv(all_fe8,
+                          model = "McFL",
+                          onlyCancer = FALSE,
+                          finalTime = 170,
+                          mu = 0.01,
+                          initSize = 5000,
+                          keepPhylog = FALSE,
+                          seed = NULL)
+```
+
+```{r, echo=FALSE}
+## Plots: number of cells vs time
+# ylim has been adapted to number of cells
+plot(simul8, show = "genotypes", type = "line",
+     col = c("black", "red", "blue"), ylim = c(20, 200000),
+     main = "~4.5d treatment - ~2d no treatment")
+plot(simul8, show = "genotypes", ylim = c(20, 9000),
+     col = c("grey", "Red3", "Sky blue"),
+     main = "~4.5d treatment - ~2d no treatment")
+```
+
+
+# References
