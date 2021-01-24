@@ -63,6 +63,7 @@ simul <- oncoSimulIndiv(all_fe,
                             seed = NULL)
 
 ## Plots: number of cells vs time
+# ylim has been adapted to number of cells
 plot(simul, show = "genotypes", type = "line",
      col = c("black", "red", "blue"), ylim = c(20, 50000),
      main = "No chemotherapy")
