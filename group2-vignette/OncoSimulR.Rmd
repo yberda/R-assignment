@@ -12794,6 +12794,8 @@ evalAllGenotypes(afeT3, spPopSizes = c(11,11,11), currentTime = 81)[c(2,3), ]
 
 ## More examples of adaptive therapy
 
+<!-- Alicia Gallego, Barbara Gonzalez and Yosra Berrouayel -->
+
 Evolution of resistance is a common cause of cancer treatment failure and tumor progression. The conventional treatment strategy, which administers cytotoxic drugs at maximum tolerated dose (MTD) until progression, can be evolutionarily unwise because it strongly selects for resistant phenotypes and eliminates potential competitors. This can lead to rapid proliferation of resistant populations. Adaptive therapy is an innovative treatment regimen that uses the same drug as the standard of care, but applies it differently. It has two different features:  
 
 * It is ‘adaptive’: Instead of using a fixed schedule, treatment decisions are based on how individual tumors respond to treatment.  
